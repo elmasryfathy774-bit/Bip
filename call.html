@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatChat | مكالمة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#070B14;
+    --surface:#0E1526;
+    --surface-2:#131B2F;
+    --border-soft: rgba(255,255,255,.08);
+    --cyan:#2FE0FF;
+    --cyan-deep:#1A4FD1;
+    --text:#EAF2FA;
+    --muted:#7C8AA3;
+    --danger:#FF5D75;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{ height:100%; }
+  body{
+    font-family:'Cairo', sans-serif;
+    color:var(--text);
+    height:100vh;
+    height:100dvh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:space-between;
+    background:
+      radial-gradient(circle at 22% 18%, rgba(47,224,255,.14), transparent 42%),
+      radial-gradient(circle at 85% 80%, rgba(26,79,209,.18), transparent 46%),
+      var(--void);
+    overflow:hidden;
+    padding:36px 24px 32px;
+    text-align:center;
+  }
+
+  .call-top{ width:100%; }
+  .call-state{
+    font-size:13.5px;
+    color:var(--muted);
+    font-weight:600;
+    letter-spacing:.3px;
+    margin-bottom:6px;
+    min-height:18px;
+  }
+  .call-timer{
+    font-size:13.5px;
+    color:var(--cyan);
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+    display:none;
+  }
+  .call-timer.show{ display:inline-block; }
+
+  .call-mid{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:22px;
+  }
+  .peer-avatar{
+    width:128px; height:128px; border-radius:50%;
+    background:linear-gradient(135deg,var(--cyan),var(--cyan-deep));
+    color:#06121C;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:46px;
+    overflow:hidden;
+    box-shadow:0 0 0 1px var(--border-soft), 0 30px 70px -20px rgba(47,224,255,.35);
+    position:relative;
+  }
+  .peer-avatar img{ width:100%; height:100%; object-fit:cover; }
+  .peer-avatar::after{
+    content:"";
+    position:absolute; inset:-10px;
+    border-radius:50%;
+    border:1.5px solid rgba(47,224,255,.35);
+    animation:ringPulse 1.8s ease-out infinite;
+  }
+  .peer-avatar.connected::after{ display:none; }
+  @keyframes ringPulse{
+    0%{ transform:scale(.94); opacity:.9; }
+    80%{ transform:scale(1.18); opacity:0; }
+    100%{ opacity:0; }
+  }
+  .peer-name{ font-size:21px; font-weight:800; }
+  .peer-sub{ font-size:13.5px; color:var(--muted); }
+
+  .call-actions{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:22px;
+  }
+  .call-btn{
+    width:58px; height:58px;
+    border-radius:50%;
+    border:none;
+    display:flex; align-items:center; justify-content:center;
+    font-size:23px;
+    cursor:pointer;
+    transition:transform .12s, filter .15s, background .15s;
+    flex-shrink:0;
+  }
+  .call-btn:active{ transform:scale(.92); }
+  .call-btn.mute{
+    background:rgba(255,255,255,.08);
+    border:1px solid var(--border-soft);
+    color:var(--text);
+  }
+  .call-btn.mute.active{
+    background:var(--cyan);
+    color:#06121C;
+  }
+  .call-btn.end{
+    width:66px; height:66px;
+    background:linear-gradient(135deg, var(--danger), #C73B54);
+    color:#fff;
+    font-size:26px;
+    box-shadow:0 10px 26px -10px rgba(255,93,117,.6);
+  }
+  .call-btn.accept{
+    width:66px; height:66px;
+    background:linear-gradient(135deg, #2FE08A, #17B66E);
+    color:#06121C;
+    font-size:26px;
+    box-shadow:0 10px 26px -10px rgba(47,224,138,.6);
+    animation:acceptPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes acceptPulse{
+    0%,100%{ box-shadow:0 10px 26px -10px rgba(47,224,138,.6); }
+    50%{ box-shadow:0 10px 36px -8px rgba(47,224,138,.95); }
+  }
+
+  .hidden{ display:none !important; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <audio id="remoteAudio" autoplay playsinline></audio>
+
+  <div class="call-top">
+    <div class="call-state" id="callState">جاري الاتصال...</div>
+    <div class="call-timer" id="callTimer">00:00</div>
+  </div>
+
+  <div class="call-mid">
+    <div class="peer-avatar" id="peerAvatar">؟</div>
+    <div>
+      <div class="peer-name" id="peerName">...</div>
+      <div class="peer-sub" id="peerSub">مكالمة صوتية</div>
+    </div>
+  </div>
+
+  <div class="call-actions" id="ringingCalleeActions">
+    <button type="button" class="call-btn end" id="rejectBtn" title="رفض">✕</button>
+    <button type="button" class="call-btn accept" id="acceptBtn" title="قبول">📞</button>
+  </div>
+
+  <div class="call-actions hidden" id="activeActions">
+    <button type="button" class="call-btn mute" id="muteBtn" title="كتم الصوت">🎤</button>
+    <button type="button" class="call-btn end" id="endBtn" title="إنهاء المكالمة">📞</button>
+  </div>
+
+<script type="module">
+  import { auth, db } from './firebase-config.js';
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  import {
+    doc, getDoc, setDoc, updateDoc, onSnapshot, deleteDoc,
+    collection, addDoc, query, onSnapshot as onSnapshotSub, serverTimestamp, deleteField
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const params = new URLSearchParams(window.location.search);
+  const chatId = params.get('chatId');
+  const peerUid = params.get('uid');
+  const peerName = params.get('name') || 'المستخدم';
+  const role = params.get('role') === 'callee' ? 'callee' : 'caller'; // caller = اللي بدأ المكالمة
+
+  if(!chatId || !peerUid){
+    window.location.href = 'chat.html';
+  }
+
+  document.getElementById('peerName').textContent = peerName;
+  const peerAvatarEl = document.getElementById('peerAvatar');
+  peerAvatarEl.textContent = peerName.charAt(0).toUpperCase();
+  getDoc(doc(db, 'users', peerUid)).then(snap => {
+    if(snap.exists() && snap.data().photoURL){
+      peerAvatarEl.innerHTML = `<img src="${snap.data().photoURL}" alt="${peerName}">`;
+    }
+  }).catch(() => {});
+
+  const callStateEl = document.getElementById('callState');
+  const callTimerEl = document.getElementById('callTimer');
+  const ringingCalleeActions = document.getElementById('ringingCalleeActions');
+  const activeActions = document.getElementById('activeActions');
+  const acceptBtn = document.getElementById('acceptBtn');
+  const rejectBtn = document.getElementById('rejectBtn');
+  const endBtn = document.getElementById('endBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const remoteAudio = document.getElementById('remoteAudio');
+
+  // الوضع الافتراضي: لو إنتِ اللي بدأتِ المكالمة، الأزرار اللي تتظهر هي "إنهاء" بس فورًا
+  if(role === 'caller'){
+    ringingCalleeActions.classList.add('hidden');
+    activeActions.classList.remove('hidden');
+    muteBtn.classList.add('hidden'); // الكتم يظهر بس لما المكالمة تتوصل فعليًا
+  }
+
+  let currentUser = null;
+  let pc = null;
+  let localStream = null;
+  let callDocRef = null;
+  let unsubCallDoc = null;
+  let unsubCandidates = null;
+  let timerInterval = null;
+  let callEnded = false;
+  let isMuted = false;
+
+  const ICE_SERVERS = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  };
+
+  onAuthStateChanged(auth, (user) => {
+    if(!user){ window.location.href = 'index.html'; return; }
+    currentUser = user;
+    callDocRef = doc(db, 'calls', chatId);
+    if(role === 'caller') startAsCaller();
+    else startAsCallee();
+  });
+
+  // ====================================================
+  // الطرف اللي بدأ المكالمة
+  // ====================================================
+  async function startAsCaller(){
+    try{
+      localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+    } catch(e){
+      callStateEl.textContent = 'محتاجة صلاحية الميكروفون';
+      setTimeout(() => window.close() || (window.location.href = `room.html?${params.toString()}`), 1800);
+      return;
+    }
+
+    pc = new RTCPeerConnection(ICE_SERVERS);
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    attachPcHandlers();
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await setDoc(callDocRef, {
+      callerUid: currentUser.uid,
+      calleeUid: peerUid,
+      callerName: currentUser.displayName || 'مستخدم',
+      status: 'ringing',
+      offer: { type: offer.type, sdp: offer.sdp },
+      createdAt: serverTimestamp()
+    });
+
+    callStateEl.textContent = 'بيرن...';
+    listenToCallDoc();
+    listenToCandidates('answerCandidates');
+
+    // مهلة عدم رد
+    setTimeout(() => {
+      if(!callEnded && callStateEl.textContent === 'بيرن...'){
+        endCall('no_answer');
+      }
+    }, 35000);
+  }
+
+  // ====================================================
+  // الطرف اللي بيستقبل المكالمة
+  // ====================================================
+  async function startAsCallee(){
+    const snap = await getDoc(callDocRef);
+    if(!snap.exists() || snap.data().status !== 'ringing'){
+      callStateEl.textContent = 'المكالمة انتهت';
+      setTimeout(() => window.location.href = `room.html?${params.toString()}`, 1200);
+      return;
+    }
+
+    callStateEl.textContent = 'مكالمة واردة';
+    listenToCallDoc(); // عشان لو الطرف التاني قفل قبل ما تردي
+
+    acceptBtn.addEventListener('click', async () => {
+      ringingCalleeActions.classList.add('hidden');
+      activeActions.classList.remove('hidden');
+      callStateEl.textContent = 'جاري الاتصال...';
+
+      try{
+        localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+      } catch(e){
+        callStateEl.textContent = 'محتاجة صلاحية الميكروفون';
+        await endCall('error');
+        return;
+      }
+
+      pc = new RTCPeerConnection(ICE_SERVERS);
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+      attachPcHandlers();
+
+      const data = (await getDoc(callDocRef)).data();
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await updateDoc(callDocRef, {
+        status: 'accepted',
+        answer: { type: answer.type, sdp: answer.sdp }
+      });
+
+      listenToCandidates('callerCandidates');
+    }, { once:true });
+
+    rejectBtn.addEventListener('click', async () => {
+      await updateDoc(callDocRef, { status: 'rejected' }).catch(()=>{});
+      cleanupAndClose();
+    }, { once:true });
+  }
+
+  // ====================================================
+  // أحداث RTCPeerConnection المشتركة
+  // ====================================================
+  function attachPcHandlers(){
+    pc.ontrack = (event) => {
+      remoteAudio.srcObject = event.streams[0];
+      onConnected();
+    };
+
+    const candidateField = role === 'caller' ? 'callerCandidates' : 'answerCandidates';
+    pc.onicecandidate = (event) => {
+      if(event.candidate){
+        addDoc(collection(db, 'calls', chatId, candidateField), event.candidate.toJSON()).catch(()=>{});
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if(pc.connectionState === 'disconnected' || pc.connectionState === 'failed'){
+        endCall('disconnected');
+      }
+    };
+  }
+
+  function listenToCandidates(subcollection){
+    const q = query(collection(db, 'calls', chatId, subcollection));
+    unsubCandidates = onSnapshotSub(q, (snap) => {
+      snap.docChanges().forEach(change => {
+        if(change.type === 'added' && pc){
+          pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(()=>{});
+        }
+      });
+    });
+  }
+
+  function listenToCallDoc(){
+    unsubCallDoc = onSnapshot(callDocRef, async (snap) => {
+      if(!snap.exists()){
+        if(!callEnded) cleanupAndClose();
+        return;
+      }
+      const data = snap.data();
+
+      if(data.status === 'rejected' && role === 'caller'){
+        callStateEl.textContent = 'تم رفض المكالمة';
+        setTimeout(cleanupAndClose, 1400);
+        return;
+      }
+
+      if(data.status === 'accepted' && role === 'caller' && pc && !pc.currentRemoteDescription && data.answer){
+        callStateEl.textContent = 'جاري الاتصال...';
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      }
+
+      if(data.status === 'ended'){
+        if(!callEnded) finishCall('انتهت المكالمة');
+      }
+    });
+  }
+
+  function onConnected(){
+    callStateEl.textContent = '';
+    callTimerEl.classList.add('show');
+    peerAvatarEl.classList.add('connected');
+    muteBtn.classList.remove('hidden');
+    startTimer();
+  }
+
+  function startTimer(){
+    let seconds = 0;
+    timerInterval = setInterval(() => {
+      seconds++;
+      const m = String(Math.floor(seconds/60)).padStart(2,'0');
+      const s = String(seconds%60).padStart(2,'0');
+      callTimerEl.textContent = `${m}:${s}`;
+    }, 1000);
+  }
+
+  // ====================================================
+  // إنهاء المكالمة
+  // ====================================================
+  async function endCall(reason){
+    if(callEnded) return;
+    callEnded = true;
+    try{
+      await updateDoc(callDocRef, { status: 'ended' }).catch(()=>{});
+    } finally {
+      finishCall(reason === 'no_answer' ? 'لا يوجد رد' : 'تم إنهاء المكالمة');
+    }
+  }
+
+  function finishCall(message){
+    callEnded = true;
+    callStateEl.textContent = message;
+    callTimerEl.classList.remove('show');
+    clearInterval(timerInterval);
+    setTimeout(cleanupAndClose, 1100);
+  }
+
+  function cleanupAndClose(){
+    try{ unsubCallDoc && unsubCallDoc(); }catch(e){}
+    try{ unsubCandidates && unsubCandidates(); }catch(e){}
+    try{ localStream && localStream.getTracks().forEach(t => t.stop()); }catch(e){}
+    try{ pc && pc.close(); }catch(e){}
+    // نظافة المستندات الفرعية (best-effort)
+    deleteDoc(callDocRef).catch(()=>{});
+    window.location.href = `room.html?chatId=${encodeURIComponent(chatId)}&uid=${encodeURIComponent(peerUid)}&name=${encodeURIComponent(peerName)}`;
+  }
+
+  endBtn.addEventListener('click', () => endCall('user_hangup'));
+
+  muteBtn.addEventListener('click', () => {
+    if(!localStream) return;
+    isMuted = !isMuted;
+    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+    muteBtn.classList.toggle('active', isMuted);
+    muteBtn.textContent = isMuted ? '🔇' : '🎤';
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if(!callEnded){
+      updateDoc(callDocRef, { status: 'ended' }).catch(()=>{});
+    }
+  });
+</script>
+
+</body>
+</html>
